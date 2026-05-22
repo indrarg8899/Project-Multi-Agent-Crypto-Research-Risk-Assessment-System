@@ -9,27 +9,39 @@ from openai import OpenAI
 
 
 class LLMClient:
-    """OpenRouter-backed LLM client using OpenAI SDK."""
+    """Gemini LLM client using OpenAI-compatible endpoint."""
 
     def __init__(self):
+        api_key = os.getenv("GEMINI_API_KEY", "")
         self.client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=os.getenv("OPENROUTER_API_KEY", ""),
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+            api_key=api_key,
         )
-        self.model = os.getenv("LLM_MODEL", "google/gemini-2.5-flash")
+        self.model = os.getenv("LLM_MODEL", "gemini-2.5-flash")
 
     def chat(self, system_prompt: str, user_prompt: str, temperature: float = 0.3) -> str:
-        """Single-turn LLM call. Returns text response."""
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=temperature,
-            max_tokens=1024,
-        )
-        return resp.choices[0].message.content or ""
+        """Single-turn LLM call with retry on rate limit."""
+        import time as _time
+        for attempt in range(3):
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=temperature,
+                    max_tokens=1024,
+                )
+                return resp.choices[0].message.content or ""
+            except Exception as e:
+                if "429" in str(e) or "quota" in str(e).lower():
+                    wait = 35 * (attempt + 1)
+                    print(f"    [LLM] Rate limited, waiting {wait}s...")
+                    _time.sleep(wait)
+                else:
+                    raise
+        return '{"risk_score": 5, "flags": ["LLM rate limit"], "summary": "Could not complete analysis due to API rate limit."}'
 
 
 class EtherscanClient:
@@ -86,17 +98,18 @@ class EtherscanClient:
 class DexScreenerClient:
     """DexScreener API client for token/pair data."""
 
-    BASE = "https://api.dexscreener.com/latest"
+    BASE = "https://api.dexscreener.com/tokens/v1"
 
     def get_token(self, address: str) -> dict:
         """Get token pairs and market data."""
         resp = httpx.get(
-            f"{self.BASE}/tokens/{address}",
+            f"{self.BASE}/ethereum/{address}",
             timeout=15,
             headers={"User-Agent": "MultiAgentCryptoResearch/1.0"},
         )
         data = resp.json()
-        pairs = data.get("pairs", [])
+        # v1 endpoint returns array directly
+        pairs = data if isinstance(data, list) else data.get("pairs", [])
         if not pairs:
             return {"found": False}
 

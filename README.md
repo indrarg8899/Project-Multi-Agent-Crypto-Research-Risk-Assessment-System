@@ -58,7 +58,7 @@ python main.py 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `OPENROUTER_API_KEY` | OpenRouter API key for LLM calls | Yes |
+| `GEMINI_API_KEY` | Gemini API key for LLM calls | Yes |
 | `ETHERSCAN_API_KEY` | Etherscan API key | Yes |
 | `LLM_MODEL` | Model to use (default: `google/gemini-2.5-flash`) | No |
 
